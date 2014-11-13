@@ -87,14 +87,21 @@ func WrapTLSServer(c net.Conn) net.Conn {
 }
 
 func WrapTLSClient(c net.Conn, hostname string) net.Conn {
+	log.Println("Wrapping TLS with hostname:", hostname)
 	ctx := try(openssl.NewCtx())
 	cert := try(MakeCert(hostname))
-	pem := try(cert.MarshalPEM())
-	log.Println("Generated cert for:", hostname)
-	log.Println("\n" + string(pem))
-
 	ctx.UseCertificate(cert)
 	ctx.UsePrivateKey(state.CAKey)
+
+	ctx.SetTLSExtServernameCallback(func(ssl *openssl.SSL) openssl.SSLTLSExtErr {
+		log.Println("Using SNI to switch hostname:", ssl.GetServername())
+		ctx := try(openssl.NewCtx())
+		cert := try(MakeCert(ssl.GetServername()))
+		ctx.UseCertificate(cert)
+		ctx.UsePrivateKey(state.CAKey)
+		ssl.SetSSLCtx(ctx)
+		return openssl.SSLTLSExtErrOK
+	})
 	conn := try(openssl.Server(c, ctx))
 	return conn
 }
