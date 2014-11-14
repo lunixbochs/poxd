@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	cacert "github.com/lunixbochs/go-cacert"
 	openssl "github.com/lunixbochs/go-openssl"
 	"io/ioutil"
 	"log"
@@ -39,11 +40,13 @@ func main() {
 
 	keyPath := path.Join(state.DataDir, "ca", "ca.key")
 	caPath := path.Join(state.DataDir, "ca", "ca.crt")
+	rootCAPath := path.Join(state.DataDir, "certs", "roots.pem")
 	if _, err := os.Stat(keyPath); os.IsNotExist(err) {
 		log.Printf("Generating 2048-bit RSA private key -> '%s'", keyPath)
 		try(MakeRSAKey(keyPath))
-		try(os.Remove(caPath))
-		log.Println()
+		if err := os.Remove(caPath); err != nil && !os.IsNotExist(err) {
+			log.Fatal(err)
+		}
 	}
 	key := try(ioutil.ReadFile(keyPath))
 	state.CAKey = try(openssl.LoadPrivateKeyFromPEM(key))
@@ -51,12 +54,20 @@ func main() {
 	if _, err := os.Stat(caPath); os.IsNotExist(err) {
 		log.Printf("Generating new SSL CA -> '%s'", caPath)
 		try(MakeCA(caPath))
-		log.Println("Add the new CA to your keychain for TLS interception.")
-		log.Println()
+		log.Println("NOTE: A new CA has been generated. Add it to your keychain for interception to succeed.")
 	}
 	ca := try(ioutil.ReadFile(caPath))
 	state.CA = try(openssl.LoadCertificateFromPEM(ca))
 
+	if _, err := os.Stat(rootCAPath); os.IsNotExist(err) {
+		if err := os.Mkdir(path.Dir(rootCAPath), os.ModeDir|0700); err != nil && !os.IsExist(err) {
+			log.Fatal(err)
+		}
+		log.Printf("Writing Mozilla trusted roots -> '%s'", rootCAPath)
+		try(ioutil.WriteFile(rootCAPath, cacert.Bundle, 0700))
+	}
+
+	log.Println()
 	ln := try(net.Listen("tcp", state.Listen))
 	log.Println("Listening for connections.")
 	log.Println()

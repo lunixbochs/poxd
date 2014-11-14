@@ -15,7 +15,7 @@ func MakeRSAKey(keyPath string) error {
 	pubKey := try(key.MarshalPKIXPublicKeyPEM())
 	privKey := try(key.MarshalPKCS1PrivateKeyPEM())
 	err = os.Mkdir(path.Dir(keyPath), os.ModeDir|0700)
-	if !os.IsExist(err) {
+	if err != nil && !os.IsExist(err) {
 		return err
 	}
 	try(ioutil.WriteFile(keyPath+".pub", pubKey, 0400))
