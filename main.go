@@ -67,6 +67,8 @@ func main() {
 		try(ioutil.WriteFile(rootCAPath, cacert.Bundle, 0700))
 	}
 
+	state.RootCAs = try(LoadRootCAs(rootCAPath))
+
 	log.Println()
 	ln := try(net.Listen("tcp", state.Listen))
 	log.Println("Listening for connections.")

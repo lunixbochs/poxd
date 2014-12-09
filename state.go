@@ -9,6 +9,7 @@ type State struct {
 	DataDir  string
 	CAKey    openssl.PrivateKey
 	CA       *openssl.Certificate
+	RootCAs  *openssl.CertificateStore
 	Sessions map[*Session]int
 	Listen   string
 }

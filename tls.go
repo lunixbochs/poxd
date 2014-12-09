@@ -10,6 +10,14 @@ import (
 	"time"
 )
 
+func LoadRootCAs(rootPath string) (*openssl.CertificateStore, error) {
+	log.Println("Loading root CAs.")
+	data := try(ioutil.ReadFile(rootPath))
+	store := try(openssl.NewCertificateStore())
+	try(store.LoadCertificatesFromPEM(data))
+	return store, nil
+}
+
 func MakeRSAKey(keyPath string) error {
 	key := try(openssl.GenerateRSAKey(2048))
 	pubKey := try(key.MarshalPKIXPublicKeyPEM())
