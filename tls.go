@@ -43,7 +43,7 @@ func MakeCA(caPath string) error {
 		openssl.NID_subject_key_identifier: "hash",
 		openssl.NID_netscape_cert_type:     "sslCA",
 	}))
-	try(ca.Sign(state.CAKey, "sha256"))
+	try(ca.Sign(state.CAKey, openssl.EVP_SHA256))
 	pem := try(ca.MarshalPEM())
 	try(ioutil.WriteFile(caPath, pem, 0400))
 	return nil
@@ -65,7 +65,7 @@ func MakeCert(hostname string) (*openssl.Certificate, error) {
 		openssl.NID_ext_key_usage:     "serverAuth",
 	}))
 	try(cert.SetIssuer(state.CA))
-	try(cert.Sign(state.CAKey, "sha256"))
+	try(cert.Sign(state.CAKey, openssl.EVP_SHA256))
 	return cert, nil
 }
 
