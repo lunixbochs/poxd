@@ -11,8 +11,9 @@ import (
 )
 
 func LoadRootCAs(rootPath string) (*openssl.CertificateStore, error) {
-	log.Println("Loading root CAs.")
 	data := try(ioutil.ReadFile(rootPath))
+	caCount := len(openssl.SplitPEM(data))
+	log.Printf("Loaded (%d) root CAs.\n", caCount)
 	store := try(openssl.NewCertificateStore())
 	try(store.LoadCertificatesFromPEM(data))
 	return store, nil

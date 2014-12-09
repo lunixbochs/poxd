@@ -1,9 +1,12 @@
 package main
 
 import (
-	"flag"
 	cacert "github.com/lunixbochs/go-cacert"
 	openssl "github.com/lunixbochs/go-openssl"
+
+	"crypto/rand"
+	"encoding/hex"
+	"flag"
 	"io/ioutil"
 	"log"
 	"net"
@@ -16,6 +19,7 @@ func main() {
 	user := try(user.Current())
 	dir := flag.String("base", user.HomeDir, "directory containing .poxd folder")
 	flag.StringVar(&state.Listen, "listen", "localhost:1080", "proxy listen address")
+	flag.StringVar(&state.ListenAlt, "listen_alt", "localhost:1081", "proxy listen address (not logged)")
 	flag.Parse()
 
 	// ensure data directory exists and is sane
@@ -34,10 +38,12 @@ func main() {
 	}
 
 	log.Println("Bind address: ", state.Listen)
+	log.Println("Bind address: ", state.ListenAlt, "(not logged)")
 	log.Println("Data path:    ", state.DataDir)
 	log.Println("Web interface:", "http://"+state.Listen)
 	log.Println()
 
+	// load or generate CA and private key
 	keyPath := path.Join(state.DataDir, "ca", "ca.key")
 	caPath := path.Join(state.DataDir, "ca", "ca.crt")
 	rootCAPath := path.Join(state.DataDir, "certs", "roots.pem")
@@ -59,6 +65,7 @@ func main() {
 	ca := try(ioutil.ReadFile(caPath))
 	state.CA = try(openssl.LoadCertificateFromPEM(ca))
 
+	// we default to our own copy of mozilla's trusted root certificates
 	if _, err := os.Stat(rootCAPath); os.IsNotExist(err) {
 		if err := os.Mkdir(path.Dir(rootCAPath), os.ModeDir|0700); err != nil && !os.IsExist(err) {
 			log.Fatal(err)
@@ -69,13 +76,49 @@ func main() {
 
 	state.RootCAs = try(LoadRootCAs(rootCAPath))
 
+	// load/check config and print useful values
+	config, first := try(state.LoadConfig())
+	if first {
+		log.Println("Generating first API key.")
+		binKey := make([]byte, 16)
+		_ = try(rand.Read(binKey))
+		apiKey := hex.EncodeToString(binKey)
+		config.ApiKeys = append(config.ApiKeys, apiKey)
+		try(state.SaveConfig())
+	}
+	if len(config.ApiKeys) > 0 {
+		log.Println("API keys:")
+		for _, v := range config.ApiKeys {
+			log.Printf("  - %s\n", v)
+		}
+	}
+
+	// time to start
+	loggedAccept := make(chan net.Conn)
+	nologAccept := make(chan net.Conn)
+	acceptFunc := func(ret chan net.Conn, ln net.Listener) {
+		conn := try(ln.Accept())
+		ret <- conn
+	}
+
 	log.Println()
-	ln := try(net.Listen("tcp", state.Listen))
+	ln1 := try(net.Listen("tcp", state.Listen))
+	ln2 := try(net.Listen("tcp", state.ListenAlt))
+	go acceptFunc(loggedAccept, ln1)
+	go acceptFunc(nologAccept, ln2)
 	log.Println("Listening for connections.")
 	log.Println()
 	for {
-		conn := try(ln.Accept())
-		log.Println("Connection from:", conn.RemoteAddr())
+		var conn net.Conn
+		var logged bool
+		select {
+		case conn = <-loggedAccept:
+			logged = true
+			log.Printf("(logging) ")
+		case conn = <-nologAccept:
+			logged = false
+		}
+		log.Println("Connection from:", conn.RemoteAddr(), logged)
 		state.OnConnect(conn)
 	}
 }
