@@ -14,6 +14,7 @@ type State struct {
 	DataDir   string
 	Listen    string
 	ListenAlt string
+	Redis     string
 	Sessions  map[*Session]int
 
 	CA      *openssl.Certificate
@@ -42,8 +43,8 @@ func (s *State) SaveConfig() error {
 	return s.Config.Save(configPath)
 }
 
-func (s *State) OnConnect(conn net.Conn) {
-	c := NewSession(conn)
+func (s *State) OnConnect(conn net.Conn, logged bool) {
+	c := NewSession(conn, logged)
 	s.Sessions[c] = 1
 	go c.Handle()
 }

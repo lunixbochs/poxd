@@ -3,6 +3,7 @@ package main
 import (
 	cacert "github.com/lunixbochs/go-cacert"
 	openssl "github.com/lunixbochs/go-openssl"
+	"github.com/lunixbochs/redigo/redis"
 
 	"crypto/rand"
 	"encoding/hex"
@@ -20,6 +21,7 @@ func main() {
 	dir := flag.String("base", user.HomeDir, "directory containing .poxd folder")
 	flag.StringVar(&state.Listen, "listen", "localhost:1080", "proxy listen address")
 	flag.StringVar(&state.ListenAlt, "listen_alt", "localhost:1081", "proxy listen address (not logged)")
+	flag.StringVar(&state.Redis, "redis", ":6379", "redis server address")
 	flag.Parse()
 
 	// ensure data directory exists and is sane
@@ -93,12 +95,24 @@ func main() {
 		}
 	}
 
+	// try connecting to Redis
+	client, err := redis.Dial("tcp", state.Redis)
+	redisWorks := true
+	if err != nil {
+		redisWorks = false
+		log.Println("Could not connect to Redis: ", err)
+	} else {
+		client.Close()
+	}
+
 	// time to start
 	loggedAccept := make(chan net.Conn)
 	nologAccept := make(chan net.Conn)
 	acceptFunc := func(ret chan net.Conn, ln net.Listener) {
-		conn := try(ln.Accept())
-		ret <- conn
+		for {
+			conn := try(ln.Accept())
+			ret <- conn
+		}
 	}
 
 	log.Println()
@@ -113,12 +127,14 @@ func main() {
 		var logged bool
 		select {
 		case conn = <-loggedAccept:
-			logged = true
-			log.Printf("(logging) ")
+			if redisWorks {
+				logged = true
+				log.Printf("(logging) ")
+			}
 		case conn = <-nologAccept:
 			logged = false
 		}
-		log.Println("Connection from:", conn.RemoteAddr(), logged)
-		state.OnConnect(conn)
+		log.Println("Connection from:", conn.RemoteAddr())
+		state.OnConnect(conn, logged)
 	}
 }

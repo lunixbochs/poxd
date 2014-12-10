@@ -1,20 +1,19 @@
 package main
 
 import (
-	"io"
 	"log"
 	"net"
-	"os"
 )
 
 type Session struct {
 	Conn
-	chain []Conn
+	chain     []Conn
+	ShouldLog bool
 }
 
-func NewSession(conn net.Conn) *Session {
+func NewSession(conn net.Conn, logged bool) *Session {
 	bf := NewConn(conn)
-	s := &Session{Conn: bf}
+	s := &Session{Conn: bf, ShouldLog: logged}
 	s.chain = append(s.chain, bf)
 	return s
 }
@@ -47,12 +46,18 @@ func (s *Session) Handle() {
 			tls := WrapTLSClient(s.Conn, host)
 			s.Chain(NewConn(tls))
 
-			clientIO := io.MultiWriter(os.Stdout, s)
-			remoteIO := io.MultiWriter(os.Stdout, remote)
-			go io.Copy(clientIO, remote)
-			go io.Copy(remoteIO, s)
+			if IsHttp(s) && s.ShouldLog {
+				LogHttp(s, remote)
+			} else {
+				Pipe(s, remote)
+			}
 		} else {
-			try(c.Proxy(), RETURN)
+			if IsHttp(s) && s.ShouldLog {
+				remote := try(c.Connect())
+				LogHttp(s, remote)
+			} else {
+				c.Proxy()
+			}
 		}
 		return
 	} else {

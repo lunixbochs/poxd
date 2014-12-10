@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"errors"
-	"io"
 	"log"
 	"net"
 	"strconv"
@@ -154,11 +153,7 @@ func (c *Socks) Connect() (net.Conn, error) {
 }
 
 func (c *Socks) Proxy() error {
-	remote, err := c.Connect()
-	if err != nil {
-		return err
-	}
-	go io.Copy(remote, c)
-	go io.Copy(c, remote)
+	remote := try(c.Connect())
+	Pipe(c, remote)
 	return nil
 }
