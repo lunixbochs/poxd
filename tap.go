@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"io"
 	"log"
+	"net/http"
 	"sync"
 )
 
@@ -50,14 +52,29 @@ func LogHttp(client, remote io.ReadWriter) {
 	clientTap := NewTap(client)
 	remoteTap := NewTap(remote)
 	go MultiCopy(Copy{clientTap, remote}, Copy{remoteTap, client})
-	go func() {
-		for v := range clientTap.Messages {
-			log.Println(string(v))
+
+	clientBuffer := &Buffer{}
+	remoteBuffer := &Buffer{}
+	go clientBuffer.Consume(remoteTap.Messages)
+	go remoteBuffer.Consume(clientTap.Messages)
+
+	clientReader := clientBuffer.Reader()
+	clientReader.SetTimeout(5)
+	remoteReader := remoteBuffer.Reader()
+	remoteReader.SetTimeout(5)
+
+	for {
+		req, err := http.ReadRequest(bufio.NewReader(clientReader))
+		log.Println(req)
+		if err != nil {
+			log.Println(err)
+			break
 		}
-	}()
-	go func() {
-		for v := range remoteTap.Messages {
-			log.Println(string(v))
+		resp, err := http.ReadResponse(bufio.NewReader(remoteReader), req)
+		log.Println(resp)
+		if err != nil {
+			log.Println(err)
+			break
 		}
-	}()
+	}
 }

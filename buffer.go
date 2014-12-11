@@ -14,6 +14,7 @@ type Buffer struct {
 type Reader struct {
 	*Buffer
 	Ready    chan int
+	Timeout  time.Duration
 	pos, buf int
 }
 
@@ -23,6 +24,13 @@ func (b *Buffer) poke() {
 			r.Ready <- 1
 		}
 	}
+}
+
+func (b *Buffer) Consume(c chan []byte) {
+	for msg := range c {
+		b.Write(msg)
+	}
+	b.Close()
 }
 
 func (b *Buffer) Write(p []byte) {
@@ -41,7 +49,11 @@ func (b *Buffer) Reader() *Reader {
 	return r
 }
 
-func (r *Reader) Read(p []byte, timeout int) (int, error) {
+func (r *Reader) SetTimeout(timeout time.Duration) {
+	r.Timeout = timeout
+}
+
+func (r *Reader) Read(p []byte) (int, error) {
 	max := len(p)
 	pos := 0
 	// block if we don't have any messages ready
@@ -49,10 +61,14 @@ func (r *Reader) Read(p []byte, timeout int) (int, error) {
 		if r.Closed {
 			return 0, errors.New("end of file")
 		}
-		select {
-		case <-r.Ready:
-		case <-time.After(time.Duration(timeout) * time.Second):
-			return 0, errors.New("buffer read timed out")
+		if r.Timeout == 0 {
+			<-r.Ready
+		} else {
+			select {
+			case <-r.Ready:
+			case <-time.After(r.Timeout * time.Second):
+				return 0, errors.New("buffer read timed out")
+			}
 		}
 	}
 	// copy buffers into dest until we run out
