@@ -53,7 +53,11 @@ func (s *Session) Handle() {
 			}
 		} else {
 			if IsHttp(s) && s.ShouldLog {
-				remote := try(c.Connect())
+				remote, err := c.Connect()
+				if err != nil {
+					s.Close()
+					return
+				}
 				LogHttp(s, remote)
 			} else {
 				c.Proxy()
