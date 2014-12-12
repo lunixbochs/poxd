@@ -19,8 +19,8 @@ import (
 func main() {
 	user := try(user.Current())
 	dir := flag.String("base", user.HomeDir, "directory containing .poxd folder")
-	flag.StringVar(&state.Listen, "listen", "localhost:1080", "proxy listen address")
-	flag.StringVar(&state.ListenAlt, "listen_alt", "localhost:1081", "proxy listen address (not logged)")
+	flag.StringVar(&state.Listen, "listen", ":1080", "proxy listen address")
+	flag.StringVar(&state.ListenAlt, "listen_alt", ":1081", "proxy listen address (not logged)")
 	flag.StringVar(&state.Redis, "redis", ":6379", "redis server address")
 	flag.Parse()
 

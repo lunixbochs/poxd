@@ -22,9 +22,9 @@ func (w Wiring) RouteHost(host string, port string) (string, error) {
 		return h, nil
 	}
 	if n, ok := w[host]; ok {
-		address = net.JoinHostPort(n, port)
+		host = n
 	}
-	return address, nil
+	return host, nil
 }
 
 func (w Wiring) Route(address string) (string, error) {

@@ -4,10 +4,12 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"log"
 	"net/http"
 	"sync"
+	"time"
 
 	"code.google.com/p/go-uuid/uuid"
 	"github.com/lunixbochs/redigo/redis"
@@ -21,10 +23,16 @@ type Copy struct {
 type Tap struct {
 	io.Writer
 	Messages chan []byte
+	eof      chan int
+	Closed   bool
 }
 
 func NewTap(w io.Writer) *Tap {
-	return &Tap{Writer: w, Messages: make(chan []byte, 50)}
+	return &Tap{
+		Writer:   w,
+		Messages: make(chan []byte, 50),
+		eof:      make(chan int, 1),
+	}
 }
 
 func (t *Tap) Write(p []byte) (int, error) {
@@ -34,8 +42,60 @@ func (t *Tap) Write(p []byte) (int, error) {
 		t.Messages <- c
 	} else {
 		close(t.Messages)
+		t.Closed = true
+		t.eof <- 1
 	}
 	return t.Writer.Write(p)
+}
+
+func (t *Tap) Reader() *Reader {
+	return &Reader{Tap: t}
+}
+
+type Reader struct {
+	*Tap
+	pending []byte
+	pos     int
+	Timeout time.Duration
+}
+
+func (r *Reader) SetTimeout(timeout time.Duration) {
+	r.Timeout = timeout
+}
+
+func (r *Reader) Read(p []byte) (int, error) {
+	max := len(p)
+	pos := 0
+	// block if we don't have a message ready
+	if r.pending == nil || r.pos >= len(r.pending) {
+		if r.Closed {
+			return 0, errors.New("end of file")
+		}
+		select {
+		case r.pending = <-r.Messages:
+		case <-r.eof:
+			return 0, errors.New("EOF")
+		case <-time.After(r.Timeout):
+			return 0, errors.New("buffer read timed out")
+		}
+	}
+	// copy buffers into dest until we would block
+loop:
+	for pos < max && r.pending != nil {
+		n := copy(p[pos:], r.pending[r.pos:])
+		pos += n
+		r.pos += n
+		if r.pos >= len(r.pending) {
+			r.pos = 0
+			select {
+			case r.pending = <-r.Messages:
+			default:
+				r.pending = nil
+				break loop
+			}
+		}
+	}
+	return pos, nil
 }
 
 func MultiCopy(copies ...Copy) {
@@ -73,8 +133,6 @@ func LogRequest(req *http.Request, resp *http.Response) error {
 	req.Write(&rawReq)
 	resp.Write(&rawResp)
 
-	log.Println(req.Header)
-
 	r := &Request{
 		Id:       uuid.New(),
 		Method:   req.Method,
@@ -95,19 +153,14 @@ func LogHttp(client, remote io.ReadWriter) {
 	remoteTap := NewTap(remote)
 	go MultiCopy(Copy{clientTap, remote}, Copy{remoteTap, client})
 
-	clientBuffer := &Buffer{}
-	remoteBuffer := &Buffer{}
-	go clientBuffer.Consume(remoteTap.Messages)
-	go remoteBuffer.Consume(clientTap.Messages)
-
-	clientReader := clientBuffer.Reader()
-	clientReader.SetTimeout(5)
-	remoteReader := remoteBuffer.Reader()
-	remoteReader.SetTimeout(5)
+	toClient := clientTap.Reader()
+	toClient.SetTimeout(5 * time.Second)
+	toRemote := remoteTap.Reader()
+	toRemote.SetTimeout(5 * time.Second)
 
 	for {
-		req, err := http.ReadRequest(bufio.NewReader(clientReader))
-		log.Println(req)
+		req, err := http.ReadRequest(bufio.NewReader(toRemote))
+		log.Println("req", req)
 		if err != nil {
 			log.Println(err)
 			if req != nil {
@@ -118,14 +171,14 @@ func LogHttp(client, remote io.ReadWriter) {
 			}
 			break
 		}
-		resp, err := http.ReadResponse(bufio.NewReader(remoteReader), req)
+		resp, err := http.ReadResponse(bufio.NewReader(toClient), req)
 		if resp != nil {
 			err2 := LogRequest(req, resp)
 			if err2 != nil {
 				log.Println(err)
 			}
 		}
-		log.Println(resp)
+		log.Println("resp", resp)
 		if err != nil {
 			log.Println(err)
 			break

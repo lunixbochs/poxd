@@ -1,13 +1,16 @@
 package main
 
 import (
-	openssl "github.com/lunixbochs/go-openssl"
+	"crypto/rand"
 	"io/ioutil"
 	"log"
+	"math/big"
 	"net"
 	"os"
 	"path"
 	"time"
+
+	openssl "github.com/lunixbochs/go-openssl"
 )
 
 func LoadRootCAs(rootPath string) (*openssl.CertificateStore, error) {
@@ -59,8 +62,12 @@ func MakeCA(caPath string) error {
 }
 
 func MakeCert(hostname string) (*openssl.Certificate, error) {
+	max := *big.NewInt(1 << 31)
+	bigSerial := try(rand.Int(rand.Reader, &max))
+	serial := int(bigSerial.Int64())
+
 	info := &openssl.CertificateInfo{
-		Serial:       1,
+		Serial:       serial,
 		Issued:       0,
 		Expires:      24 * time.Hour,
 		Country:      "US",
@@ -103,6 +110,10 @@ func WrapTLSClient(c net.Conn, hostname string) net.Conn {
 	ctx.UsePrivateKey(state.CAKey)
 
 	ctx.SetTLSExtServernameCallback(func(ssl *openssl.SSL) openssl.SSLTLSExtErr {
+		newHostname := ssl.GetServername()
+		if newHostname == hostname || newHostname == "" {
+			return openssl.SSLTLSExtErrOK
+		}
 		log.Println("Using SNI to switch hostname:", ssl.GetServername())
 		ctx := try(openssl.NewCtx())
 		cert := try(MakeCert(ssl.GetServername()))

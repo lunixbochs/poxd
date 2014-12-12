@@ -35,18 +35,17 @@ func (s *Session) Handle() {
 		}
 		log.Println("CONNECT:", c.Remote)
 		if IsTLS(s) {
-			log.Println("TLS detected.")
 			remote, err := c.Connect()
 			if err != nil {
 				s.Close()
 				return
 			}
 			remote = WrapTLSServer(remote)
-			host, _ := try(net.SplitHostPort(c.Remote))
+			host, port := try(net.SplitHostPort(c.Remote))
 			tls := WrapTLSClient(s.Conn, host)
 			s.Chain(NewConn(tls))
 
-			if IsHttp(s) && s.ShouldLog {
+			if (IsHttp(s) || port == "443") && s.ShouldLog {
 				LogHttp(s, remote)
 			} else {
 				Pipe(s, remote)
