@@ -27,15 +27,17 @@ var state *State = &State{
 }
 
 func (s *State) LoadConfig() (*Config, bool, error) {
+	first := false
 	configPath := path.Join(s.DataDir, "config.yml")
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		s.Config = &Config{}
-		return s.Config, true, nil
+		s.SaveConfig()
+		first = true
 	} else if err != nil {
-		return nil, false, err
+		return nil, first, err
 	}
 	s.Config = try(LoadConfig(configPath))
-	return s.Config, false, nil
+	return s.Config, first, nil
 }
 
 func (s *State) SaveConfig() error {
