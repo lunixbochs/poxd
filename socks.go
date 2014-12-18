@@ -149,7 +149,7 @@ func (c *Socks) recvAddr(addrType byte) (string, error) {
 }
 
 func (c *Socks) Connect() (net.Conn, error) {
-	return net.Dial("tcp", c.Remote)
+	return Dial("tcp", c.Remote)
 }
 
 func (c *Socks) Proxy() error {

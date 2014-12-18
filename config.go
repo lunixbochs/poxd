@@ -12,6 +12,7 @@ import (
 
 type Config struct {
 	ApiKeys []string `yaml:"api_keys"`
+	Wiring  Wiring   `yaml:"wire"`
 }
 
 func LoadConfig(configPath string) (*Config, error) {
