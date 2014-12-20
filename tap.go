@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"encoding/json"
 	"errors"
 	"io"
 	"log"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"code.google.com/p/go-uuid/uuid"
+	"github.com/lunixbochs/mgo/bson"
 	"github.com/lunixbochs/redigo/redis"
 )
 
@@ -114,17 +114,17 @@ func Pipe(client, remote io.ReadWriter) {
 }
 
 type Request struct {
-	Id       string `json:"id"`
-	Method   string `json:"method"`
-	Uri      string `json:"uri"`
-	Host     string `json:"host"`
-	Request  string `json:"request"`
-	Response string `json:"response"`
+	Id       string `bson:"id"`
+	Method   string `bson:"method"`
+	Uri      string `bson:"uri"`
+	Host     string `bson:"host"`
+	Request  string `bson:"request"`
+	Response string `bson:"response"`
 }
 
 type QertMessage struct {
-	Type    string   `json:"type"`
-	Request *Request `json:"request"`
+	Type    string   `bson:"type"`
+	Request *Request `bson:"request"`
 }
 
 func LogRequest(req *http.Request, resp *http.Response) error {
@@ -141,9 +141,9 @@ func LogRequest(req *http.Request, resp *http.Response) error {
 		Request:  rawReq.String(),
 		Response: rawResp.String(),
 	}
-	data := try(json.Marshal(r))
+	data := try(bson.Marshal(r))
 	red.Do("LPUSH", "qert-history", data)
-	data = try(json.Marshal(&QertMessage{"request", r}))
+	data = try(bson.Marshal(&QertMessage{"request", r}))
 	red.Do("PUBLISH", "qert", data)
 	return nil
 }
