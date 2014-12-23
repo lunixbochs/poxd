@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"code.google.com/p/go-uuid/uuid"
+	"github.com/lunixbochs/go-uuid/uuid"
 	"github.com/lunixbochs/mgo/bson"
 	"github.com/lunixbochs/redigo/redis"
 )
