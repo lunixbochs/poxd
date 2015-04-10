@@ -120,6 +120,7 @@ type Request struct {
 	Host     string `bson:"host"`
 	Request  string `bson:"request"`
 	Response string `bson:"response"`
+	Time     int64  `bson:"time"`
 }
 
 type QertMessage struct {
@@ -140,6 +141,7 @@ func LogRequest(req *http.Request, resp *http.Response) error {
 		Host:     req.Host,
 		Request:  rawReq.String(),
 		Response: rawResp.String(),
+		Time:     time.Now().UTC().UnixNano(),
 	}
 	data := try(bson.Marshal(r))
 	red.Do("LPUSH", "qert-history", data)
